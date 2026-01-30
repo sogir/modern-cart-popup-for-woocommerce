@@ -1,5 +1,5 @@
 /*
- * 1. AJAXIFY SINGLE ADD TO CART (With Data Guarantee)
+ * 1. AJAXIFY SINGLE ADD TO CART (Standard)
  */
 add_action( 'wp_footer', 'ajaxify_single_add_to_cart_script', 99 );
 
@@ -8,30 +8,23 @@ function ajaxify_single_add_to_cart_script() {
     ?>
     <script type="text/javascript">
     jQuery(document).ready(function($) {
-        
         $('form.cart').on('submit', function(e) {
-            
-            // Ignore if it's the "Buy Now" button
             if( $(this).find('input[name="wpcode_buy_now_flag"]').val() === '1' ) return;
-
             e.preventDefault();
 
             var $form = $(this);
             var $btn  = $form.find('button[type="submit"]');
 
             if( $btn.is('.disabled') || $btn.is('.loading') ) return;
-
             $btn.addClass('loading');
 
             var formData = new FormData($form[0]);
             formData.append('add-to-cart', $btn.val());
 
-            // Ensure we have the URL
             var ajaxUrl = (typeof wc_add_to_cart_params !== 'undefined') 
                 ? wc_add_to_cart_params.wc_ajax_url.toString().replace( '%%endpoint%%', 'add_to_cart' ) 
                 : '/?wc-ajax=add_to_cart';
 
-            // 1. Send Add to Cart Request
             $.ajax({
                 url: ajaxUrl,
                 type: 'POST',
@@ -40,26 +33,19 @@ function ajaxify_single_add_to_cart_script() {
                 contentType: false,
                 success: function(response) {
                     $btn.removeClass('loading');
-
                     if ( response.error && response.product_url ) {
                         window.location = response.product_url;
                         return;
                     }
-
-                    // Helper: Trigger the update event for the floating cart
                     var triggerCartUpdate = function( frags, hash ) {
                         $( document.body ).trigger( 'added_to_cart', [ frags, hash, $btn ] );
                     };
-
-                    // 2. CHECK: Did we get the custom pill data?
                     if ( response.fragments && ( response.fragments['#fmc-pill-data'] || response.fragments['.pill-data'] ) ) {
                         triggerCartUpdate( response.fragments, response.cart_hash );
                     } else {
-                        // FIX: Manually fetch fresh fragments
                         var refreshUrl = (typeof wc_add_to_cart_params !== 'undefined') 
                             ? wc_add_to_cart_params.wc_ajax_url.toString().replace( '%%endpoint%%', 'get_refreshed_fragments' ) 
                             : '/?wc-ajax=get_refreshed_fragments';
-
                         $.ajax({
                             url: refreshUrl,
                             type: 'POST',
@@ -71,9 +57,7 @@ function ajaxify_single_add_to_cart_script() {
                         });
                     }
                 },
-                error: function() {
-                    window.location.reload(); 
-                }
+                error: function() { window.location.reload(); }
             });
         });
     });
@@ -82,190 +66,207 @@ function ajaxify_single_add_to_cart_script() {
 }
 
 /*
- * 2. FLOATING CART CORE (Robust Sync + Auto-Open)
+ * 2. FLOATING CART CORE
  */
 add_action( 'wp_footer', 'render_interactive_floating_cart' );
 
 function render_interactive_floating_cart() {
-    if ( is_checkout() ) return;
+    if ( is_checkout() || is_cart() ) return; 
     if ( ! function_exists( 'WC' ) ) return;
     
-    // Initial State
+    // Initial server-side empty check
     $is_hidden_style = WC()->cart->is_empty() ? 'style="display:none;"' : '';
     ?>
 
     <!-- WRAPPER -->
     <div id="floating-cart-wrapper" <?php echo $is_hidden_style; ?>>
         
-        <!-- HOVER MINI CART LIST -->
+        <!-- MINI CART CONTAINER -->
         <div class="floating-mini-cart-container">
             <?php echo get_interactive_mini_cart_html(); ?>
         </div>
 
         <!-- MAIN PILL BUTTON -->
         <div class="shiny-pill-button">
+            <!-- Link goes directly to Checkout -->
             <a href="<?php echo wc_get_checkout_url(); ?>" class="pill-main-link">
-                <!-- SVG Icon -->
+                <!-- Icon -->
                 <svg class="pill-icon-svg" viewBox="0 0 24 24" fill="currentColor" width="20" height="20">
                      <path d="M7 18c-1.1 0-1.99.9-1.99 2S5.9 22 7 22s2-.9 2-2-.9-2-2-2zM1 2v2h2l3.6 7.59-1.35 2.45c-.16.28-.25.61-.25.96 0 1.1.9 2 2 2h12v-2H7.42c-.14 0-.25-.11-.25-.25l.03-.12.9-1.63h7.45c.75 0 1.41-.41 1.75-1.03l3.58-6.49c.08-.14.12-.31.12-.48 0-.55-.45-1-1-1H5.21l-.94-2H1zm16 16c-1.1 0-1.99.9-1.99 2s.89 2 1.99 2 2-.9 2-2-.9-2-2-2z"/>
                 </svg>
                 <span class="pill-divider">|</span>
-                <!-- Data Span (Updated via AJAX) -->
+                <!-- Text Data -->
                 <span class="pill-data" id="fmc-pill-data">
                    <?php echo get_custom_pill_text(); ?>
                 </span>
+                <!-- Desktop Arrow: Right Arrow -->
                 <span class="pill-arrow-desktop">&rarr;</span>
             </a>
             
-            <!-- Mobile Toggle -->
+            <!-- Mobile Expand Icon -->
             <div class="mobile-expand-btn">
                 <svg class="chevron-icon" viewBox="0 0 24 24" width="24" height="24" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"></polyline></svg>
             </div>
         </div>
     </div>
 
-    <!-- STYLES -->
     <style>
-        /* Hide Default Notices */
-        .woocommerce-message, .woocommerce-error, .woocommerce-info { display: none !important; }
-
-        /* Wrapper */
+        /* 1. Base Wrapper */
         #floating-cart-wrapper {
             position: fixed; bottom: 30px; right: 30px; z-index: 999999;
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
             transition: opacity 0.3s;
         }
 
-        /* Pill Button */
+        /* 2. Shiny Pill Button */
         .shiny-pill-button {
             display: flex; align-items: center; position: relative;
             background: #000; border-radius: 50px; padding: 1px; 
             background-image: linear-gradient(#000, #000), linear-gradient(110deg, #000 30%, #fff 50%, #000 70%);
             background-origin: border-box; background-clip: content-box, border-box;
             background-size: 200% 100%; animation: shineBorder 3s linear infinite;
-            box-shadow: 0 10px 25px rgba(0,0,0,0.4);
+            box-shadow: 0 10px 25px rgba(0,0,0,0.3);
             transition: transform 0.2s ease;
         }
         @keyframes shineBorder { 0% { background-position: 100% 0; } 100% { background-position: -100% 0; } }
         .shiny-pill-button:hover { transform: scale(1.02); }
 
-        /* Content */
+        /* Links & Text */
         .pill-main-link {
             display: flex; align-items: center; text-decoration: none; color: #fff;
-            padding: 12px 0 12px 20px; padding-right: 20px; height: 100%;
+            padding: 12px 0 12px 20px; padding-right: 20px; height: 100%; cursor: pointer;
         }
         .pill-icon-svg { margin-right: 8px; fill: #fff; }
-        .pill-divider { opacity: 0.5; margin-right: 8px; color: #fff; }
+        .pill-divider { opacity: 0.3; margin-right: 8px; color: #fff; }
         .pill-data { font-weight: 700; font-size: 14px; white-space: nowrap; color: #fff; min-width: 80px; }
-        .pill-arrow-desktop { margin-left: 8px; color: #fff; font-size: 16px; }
+        
+        .pill-arrow-desktop { margin-left: 10px; color: #fff; font-size: 18px; line-height: 1; }
 
-        /* Mobile Toggle Icon */
         .mobile-expand-btn {
-            display: none; align-items: center; justify-content: center; cursor: pointer;
-            padding: 0 15px; height: 48px; border-left: 1px solid rgba(255,255,255,0.2);
-            background: rgba(255,255,255,0.05);
+            display: flex; align-items: center; justify-content: center; cursor: pointer;
+            padding: 0 15px; height: 48px; border-left: 1px solid rgba(255,255,255,0.15);
+            background: rgba(255,255,255,0.05); border-radius: 0 50px 50px 0;
         }
-        /* FIX: White color !important */
-        .mobile-expand-btn svg { stroke: #fff !important; }
+        .mobile-expand-btn svg { stroke: #fff !important; transition: transform 0.3s; }
+        
+        @media (min-width: 769px) {
+            .mobile-expand-btn { display: none !important; }
+            .pill-main-link { padding-right: 25px; border-radius: 50px; }
+        }
 
-        /* MINI CART CONTAINER */
+        /* 3. Mini Cart Container */
         .floating-mini-cart-container {
-            position: absolute; bottom: 100%; right: 0; width: 360px;
-            background: #fff; color: #333; border-radius: 12px;
-            box-shadow: 0 5px 30px rgba(0,0,0,0.2); margin-bottom: 15px; padding: 0;
-            opacity: 0; visibility: hidden; transform: translateY(10px);
-            transition: all 0.3s ease; pointer-events: none;
-            overflow: hidden; /* For rounded corners */
+            position: absolute; 
+            bottom: 100%; 
+            right: 0; 
+            width: 400px;
+            padding-bottom: 25px; /* Hover Bridge */
+            background: transparent; 
+            
+            /* ANIMATION STATE: HIDDEN */
+            /* This scale+translate creates the "Pop Up" effect when it becomes visible */
+            opacity: 0; 
+            visibility: hidden; 
+            transform: translateY(20px) scale(0.9);
+            
+            /* Smooth transition for every popup */
+            transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+            
+            pointer-events: none; 
             display: flex; flex-direction: column;
         }
-        /* Hover Bridge */
-        .floating-mini-cart-container::before {
-            content: ''; position: absolute; top: 100%; left: 0; width: 100%; height: 20px; background: transparent;
+        
+        /* 4. The Visible Card */
+        .fmc-card {
+            background: #fff; color: #333; 
+            border-radius: 12px;
+            border: 2px solid #000;
+            box-shadow: 0 -5px 30px rgba(0,0,0,0.15); 
+            overflow: hidden;
+            display: flex; flex-direction: column;
         }
 
-        /* Desktop Hover */
+        /* OPEN STATES (Via Hover or Class) */
+        
+        /* Only allow CSS hover on Desktop to prevent mobile conflict */
         @media (min-width: 769px) {
             #floating-cart-wrapper:hover .floating-mini-cart-container {
-                opacity: 1; visibility: visible; transform: translateY(0); pointer-events: auto;
+                opacity: 1; visibility: visible; 
+                transform: translateY(0) scale(1); /* Pop Up Animation */
+                pointer-events: auto;
             }
         }
-        
-        /* Force Open */
-        .floating-mini-cart-container.force-open {
-            opacity: 1 !important; visibility: visible !important; transform: translateY(0) !important; pointer-events: auto !important;
+
+        /* JS Class (Used for Mobile & Auto-Open) */
+        #floating-cart-wrapper.is-open .floating-mini-cart-container {
+            opacity: 1 !important; 
+            visibility: visible !important; 
+            transform: translateY(0) scale(1) !important; /* Pop Up Animation */
+            pointer-events: auto !important;
         }
-        
-        /* HEADER */
+
+        /* --- TABLE / LIST STYLING --- */
         .fmc-header { 
-            font-size: 14px; font-weight: 700; color: #333; 
-            background: #f9f9f9;
-            padding: 15px; 
-            display: flex; justify-content: space-between; align-items: center;
-            border-bottom: 1px solid #eee; 
+            font-size: 15px; font-weight: 700; color: #222; background: #fff;
+            padding: 15px 20px; display: flex; justify-content: space-between; align-items: center;
+            border-bottom: 2px solid #f0f0f0; 
         }
-        .fmc-close-icon {
-            cursor: pointer; font-size: 20px; line-height: 1; color: #999;
-            width: 24px; height: 24px; text-align: center;
-            transition: color 0.2s;
-        }
-        .fmc-close-icon:hover { color: #ff4444; }
+        .fmc-close-icon { font-size: 24px; line-height: 1; color: #888; cursor: pointer; padding: 0 5px; }
+        .fmc-close-icon:hover { color: #000; }
 
-        /* LIST */
-        .fmc-list { list-style: none; margin: 0; padding: 15px; max-height: 250px; overflow-y: auto; }
-        .fmc-item { display: grid; grid-template-columns: 1fr auto auto; align-items: center; gap: 10px; margin-bottom: 12px; font-size: 13px; border-bottom: 1px dashed #eee; padding-bottom: 8px; }
-        .fmc-item:last-child { border-bottom: none; margin-bottom: 0; padding-bottom: 0; }
-        .fmc-name { font-weight: 600; color: #333; line-height: 1.2; }
-        .fmc-actions { display: flex; align-items: center; gap: 5px; background: #f5f5f5; padding: 2px 6px; border-radius: 4px; }
-        .fmc-qty-num { font-weight: bold; min-width: 15px; text-align: center; }
-        .fmc-btn-action { text-decoration: none; display: inline-flex; justify-content: center; align-items: center; width: 18px; height: 18px; border-radius: 50%; font-weight: bold; font-size: 12px; background: #fff; color: #000 !important; border: 1px solid #ccc; cursor: pointer; }
-        .fmc-btn-action:hover { background: #000; color: #fff !important; }
-        .fmc-btn-remove { color: #ff4444; font-size: 16px; margin-left: 5px; text-decoration: none; }
-        
-        .fmc-price { text-align: right; }
-        /* Price styling to handle del/ins */
-        .fmc-price del { opacity: 0.5; font-size: 0.9em; margin-right: 4px; }
-        .fmc-price ins { text-decoration: none; font-weight: bold; }
+        .fmc-list { list-style: none; margin: 0; padding: 0; max-height: 300px; overflow-y: auto; background: #fff; }
 
-        /* FOOTER & TOTALS */
-        .fmc-footer {
-            padding: 15px;
-            background: #fff;
-            border-top: 1px solid #eee;
+        .fmc-item { 
+            display: grid; 
+            grid-template-columns: 1fr auto auto min-content; 
+            gap: 12px; align-items: center; padding: 15px 20px; border-bottom: 1px solid #eee; 
         }
-        .fmc-subtotal-row {
-            display: flex; justify-content: space-between; align-items: center;
-            margin-bottom: 15px;
-            font-size: 16px; font-weight: 800; color: #000;
-        }
-        .fmc-subtotal-label { color: #555; font-size: 14px; font-weight: 600; }
-        
-        .fmc-checkout-btn { display: block; width: 100%; padding: 12px 0; border: 1px solid #000; border-radius: 50px; background: #000; color: #fff !important; font-weight: 700; font-size: 13px; text-transform: uppercase; text-decoration: none; text-align: center; transition: opacity 0.2s; }
-        .fmc-checkout-btn:hover { opacity: 0.8; }
+        .fmc-item:last-child { border-bottom: none; }
 
-        /* Mobile */
+        .fmc-name { font-weight: 600; font-size: 14px; color: #333; line-height: 1.3; }
+        .fmc-name a { text-decoration: none; color: inherit; }
+
+        .fmc-actions { display: flex; align-items: center; border: 1px solid #ddd; border-radius: 4px; overflow: hidden; height: 32px; }
+        .fmc-btn-action { 
+            display: flex; align-items: center; justify-content: center; width: 28px; height: 100%;
+            background: #f9f9f9; color: #555 !important; text-decoration: none; font-weight: bold; font-size: 16px;
+        }
+        .fmc-qty-num { padding: 0 8px; font-size: 13px; font-weight: 600; min-width: 20px; text-align: center; }
+
+        .fmc-btn-remove {
+            color: #ff5555; text-decoration: none; font-size: 20px; 
+            line-height: 1; cursor: pointer; padding: 5px;
+            display: flex; align-items: center; justify-content: center;
+        }
+        .fmc-btn-remove:hover { color: #cc0000; transform: scale(1.1); }
+
+        .fmc-price { 
+            text-align: right; font-size: 14px; 
+            display: flex; flex-direction: column; justify-content: center; align-items: flex-end;
+            min-width: 60px;
+        }
+        .fmc-price del, .fmc-price .woocommerce-Price-amount:first-child:not(:last-child) { 
+            display: block !important; font-size: 11px; color: #aaa; text-decoration: line-through; margin-bottom: 2px;
+        }
+        .fmc-price ins, .fmc-price .woocommerce-Price-amount:last-child { 
+            display: block !important; font-weight: 800; color: #000; text-decoration: none; 
+        }
+
+        .fmc-footer { padding: 20px; background: #f9f9f9; border-top: 2px solid #f0f0f0; }
+        .fmc-subtotal-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; font-weight: 800; color: #000; }
+        .fmc-checkout-btn { 
+            display: block; width: 100%; padding: 14px 0; background: #000; color: #fff !important; 
+            font-weight: 700; font-size: 14px; text-transform: uppercase; text-decoration: none; text-align: center; border-radius: 4px;
+        }
+
+        /* Mobile Responsive */
         @media (max-width: 768px) {
-            #floating-cart-wrapper { bottom: 20px; right: 20px; }
+            #floating-cart-wrapper { bottom: 15px; right: 15px; left: 15px; width: auto; display: flex; justify-content: flex-end; }
             .pill-arrow-desktop { display: none; }
-            .mobile-expand-btn { display: flex; }
-            .pill-main-link { padding-right: 10px; }
-            
-            /* Mobile Positioning Fix */
             .floating-mini-cart-container { 
-                display: none; 
-                width: 90vw; 
-                max-width: 360px; 
-                right: 0; 
-                /* FIX: Gap removed */
-                bottom: 60px; 
-                margin-bottom: 0;
-                transform: none; 
-                visibility: visible; 
-                opacity: 1; 
+                width: 100%; max-width: 100%; right: 0; bottom: 70px; 
+                transform: translateY(20px); padding-bottom: 0;
             }
-            
-            #floating-cart-wrapper.mobile-open .floating-mini-cart-container { display: flex !important; pointer-events: auto; animation: fadeUp 0.3s ease; }
-            #floating-cart-wrapper.mobile-open .chevron-icon { transform: rotate(180deg); }
-            @keyframes fadeUp { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
         }
 
         .do-shake .shiny-pill-button { animation: cartShake 0.5s ease-in-out !important; }
@@ -277,120 +278,115 @@ function render_interactive_floating_cart() {
     jQuery(document).ready(function($){
         
         var autoCloseTimer;
+        var emptyCartTimer; 
+        var $wrapper = $('#floating-cart-wrapper');
 
-        // 1. LISTEN FOR EVENTS
-        $(document.body).on('added_to_cart removed_from_cart updated_cart_totals wc_fragments_refreshed', function(e, fragments, cart_hash, $button){
-            
-            var $wrapper = $('#floating-cart-wrapper');
-            var $miniCart = $wrapper.find('.floating-mini-cart-container');
-            
-            if( fragments ) {
-                if( fragments['.floating-mini-cart-container'] ) {
-                    $miniCart.replaceWith( fragments['.floating-mini-cart-container'] );
-                    $miniCart = $wrapper.find('.floating-mini-cart-container'); 
+        // Helper: Logic to Show or Hide Wrapper
+        function checkCartState() {
+            var isEmpty = $wrapper.find('.fmc-list').length === 0;
+
+            if ( isEmpty ) {
+                // If empty, wait 2 seconds then fade out
+                if ( !emptyCartTimer ) {
+                    emptyCartTimer = setTimeout(function(){
+                        $wrapper.fadeOut();
+                    }, 2000); 
                 }
-                if( fragments['#fmc-pill-data'] ) {
-                    $('#fmc-pill-data').replaceWith( fragments['#fmc-pill-data'] );
-                } else if ( fragments['.pill-data'] ) {
-                    $('#fmc-pill-data').replaceWith( fragments['.pill-data'] );
+            } else {
+                clearTimeout(emptyCartTimer);
+                emptyCartTimer = null;
+                // Fade in if hidden
+                if ( !$wrapper.is(':visible') ) {
+                    $wrapper.fadeIn();
                 }
             }
+        }
 
-            $wrapper.fadeIn();
-            $wrapper.addClass('do-shake');
-            setTimeout(function(){ $wrapper.removeClass('do-shake'); }, 500);
+        // Events: Add/Remove/Update
+        $(document.body).on('added_to_cart removed_from_cart updated_cart_totals wc_fragments_refreshed', function(e, fragments){
+            
+            var $miniCart = $wrapper.find('.floating-mini-cart-container');
+            if( fragments ) {
+                if( fragments['.floating-mini-cart-container'] ) $miniCart.replaceWith( fragments['.floating-mini-cart-container'] );
+                if( fragments['#fmc-pill-data'] ) $('#fmc-pill-data').replaceWith( fragments['#fmc-pill-data'] );
+            }
 
+            // Run Visibility Logic
+            checkCartState();
+
+            // Shake Animation if visible
+            if ( $wrapper.is(':visible') ) {
+                $wrapper.addClass('do-shake');
+                setTimeout(function(){ $wrapper.removeClass('do-shake'); }, 500);
+            }
+
+            // Auto-open logic when adding items
             if ( e.type === 'added_to_cart' ) {
                 clearTimeout(autoCloseTimer);
-                $miniCart.addClass('force-open');
-                $wrapper.addClass('mobile-open');
-
+                $wrapper.addClass('is-open');
                 autoCloseTimer = setTimeout(function(){
-                    if( ! $wrapper.is(':hover') ) {
-                        $wrapper.find('.floating-mini-cart-container').removeClass('force-open');
-                        $wrapper.removeClass('mobile-open');
-                    }
+                    // Only auto-close if not hovering (desktop)
+                    if( ! $wrapper.is(':hover') ) $wrapper.removeClass('is-open');
                 }, 4000);
             }
-            
-            if( $('.fmc-item').length === 0 && !fragments ) {
-                 $wrapper.fadeOut();
-            }
         });
 
-        // 2. AUTO CLOSE LOGIC
+        // Hover Logic (Desktop Only)
         $(document).on('mouseenter', '#floating-cart-wrapper', function() {
+            // FIX: Disable this logic on mobile to prevent "Double Click" issue
+            if( window.matchMedia('(max-width: 768px)').matches ) return;
+            
             clearTimeout(autoCloseTimer);
-            $(this).find('.floating-mini-cart-container').addClass('force-open');
+            $(this).addClass('is-open');
         });
-
+        
         $(document).on('mouseleave', '#floating-cart-wrapper', function() {
-            var $wrapper = $(this);
-            autoCloseTimer = setTimeout(function(){
-                 $wrapper.find('.floating-mini-cart-container').removeClass('force-open');
-            }, 1000);
+            autoCloseTimer = setTimeout(function(){ $wrapper.removeClass('is-open'); }, 800);
         });
 
-        // 3. Mobile Interactions
+        // Toggle (Mobile)
         $(document).on('click', '.mobile-expand-btn', function(e){
-            e.preventDefault(); e.stopPropagation(); 
-            $('#floating-cart-wrapper').toggleClass('mobile-open');
+            e.preventDefault(); 
+            e.stopPropagation(); // Stop bubbling to prevent conflicts
+            $wrapper.toggleClass('is-open');
         });
-
-        $(document).on('click', function(e) {
-            if (!$(e.target).closest('#floating-cart-wrapper').length) {
-                $('#floating-cart-wrapper').removeClass('mobile-open');
-                $('.floating-mini-cart-container').removeClass('force-open');
-            }
-        });
-
+        
+        // Close Button Logic
         $(document).on('click', '.fmc-close-icon', function(e){
-            e.preventDefault();
-            $('#floating-cart-wrapper').removeClass('mobile-open');
-            $('.floating-mini-cart-container').removeClass('force-open');
+            e.preventDefault(); 
+            e.stopPropagation(); 
+            $wrapper.removeClass('is-open');
         });
 
-        // 4. Qty Buttons Logic (FIXED)
-        $(document).on('click', '.fmc-btn-action', function(e) {
+        // AJAX Update (Qty & Remove)
+        $(document).on('click', '.fmc-btn-action, .fmc-btn-remove', function(e) {
             e.preventDefault();
-            e.stopImmediatePropagation(); // Prevent double firing
+            e.stopImmediatePropagation();
             
             var $btn = $(this);
             var key = $btn.data('key');
             var qty = parseInt($btn.data('qty'));
+            var action = $btn.data('action');
             
-            if( !key || isNaN(qty) ) return;
+            if( !key ) return;
 
-            var new_qty = ($btn.data('action') === 'plus') ? qty + 1 : qty - 1;
-
-            // Trigger Remove if 0
-            if( new_qty < 1 ) {
-                 $('.fmc-btn-remove[data-cart_item_key="' + key + '"]').trigger('click');
-                 return;
-            }
-
-            // Visual feedback
             $btn.closest('.fmc-item').css('opacity', '0.5');
 
-            // Fallback for Ajax URL if params are missing
-            var ajaxUrl = (typeof wc_add_to_cart_params !== 'undefined') ? wc_add_to_cart_params.ajax_url : '/wp-admin/admin-ajax.php';
+            var new_qty = 0; 
+            if ( $btn.hasClass('fmc-btn-action') ) {
+                new_qty = (action === 'plus') ? qty + 1 : qty - 1;
+            }
 
             $.ajax({
                 type: 'POST', 
-                url: ajaxUrl,
+                url: wc_add_to_cart_params.ajax_url,
                 data: { action: 'fmc_update_qty', cart_item_key: key, quantity: new_qty },
                 success: function(res) {
                     if ( res.success ) {
                         $( document.body ).trigger( 'added_to_cart', [ res.data.fragments, res.data.cart_hash ] );
-                    }
+                    } else { window.location.reload(); }
                 },
-                error: function() {
-                    // Fallback reload if ajax fails
-                    window.location.reload();
-                },
-                complete: function() { 
-                    $btn.closest('.fmc-item').css('opacity', '1'); 
-                }
+                error: function() { window.location.reload(); }
             });
         });
 
@@ -399,67 +395,59 @@ function render_interactive_floating_cart() {
     <?php
 }
 
-/* --- PHP FRAGMENT HELPERS --- */
+/* PHP HELPERS */
 
-// 1. Text Format
 function get_custom_pill_text() {
     if( ! WC()->cart ) return '';
     $count = WC()->cart->get_cart_contents_count();
-    $total = WC()->cart->get_cart_total();
-    return "{$count} Items - {$total}";
+    $total = WC()->cart->get_cart_total(); 
+    return "{$count} Items &bull; " . strip_tags($total);
 }
 
-// 2. Mini Cart HTML
 function get_interactive_mini_cart_html() {
-    if ( ! WC()->cart || WC()->cart->is_empty() ) return '<div style="padding:15px;text-align:center;">Cart is empty</div>';
+    if ( ! WC()->cart || WC()->cart->is_empty() ) {
+        return '<div class="fmc-card"><div style="padding:20px;text-align:center;">Your cart is empty.</div></div>';
+    }
 
-    // Header with Close Icon
-    $html = '<div class="fmc-header">';
-    $html .= '<span>Your Cart</span>';
-    $html .= '<span class="fmc-close-icon">&times;</span>';
-    $html .= '</div>';
-
-    // Items List
+    $html = '<div class="fmc-card">';
+    $html .= '<div class="fmc-header"><span>Shopping Cart</span><span class="fmc-close-icon">&times;</span></div>';
     $html .= '<ul class="fmc-list">';
     
     foreach ( WC()->cart->get_cart() as $cart_item_key => $cart_item ) {
         $_product = apply_filters( 'woocommerce_cart_item_product', $cart_item['data'], $cart_item, $cart_item_key );
         if ( $_product && $_product->exists() && $cart_item['quantity'] > 0 ) {
             $product_name = $_product->get_name();
-            
-            // FIX: Use get_price_html() to ensure strike-through prices (Sale + Regular) show up
-            $price = $_product->get_price_html(); 
-            
+            $price = WC()->cart->get_product_price( $_product );
             $qty = $cart_item['quantity'];
-            $remove = wc_get_cart_remove_url( $cart_item_key );
 
             $html .= '<li class="fmc-item">';
-            $html .= '<div class="fmc-info"><span class="fmc-name">' . $product_name . '</span></div>';
+            $html .= '<div class="fmc-name"><a href="'.esc_url($_product->get_permalink()).'">' . $product_name . '</a></div>';
+            
             $html .= '<div class="fmc-actions">';
-            $html .= '<a href="#" class="fmc-btn-action" data-action="minus" data-key="'.$cart_item_key.'" data-qty="'.$qty.'">-</a>';
+            $html .= '<a href="#" class="fmc-btn-action" data-action="minus" data-key="'.$cart_item_key.'" data-qty="'.$qty.'">&minus;</a>';
             $html .= '<span class="fmc-qty-num">' . $qty . '</span>';
-            $html .= '<a href="#" class="fmc-btn-action" data-action="plus" data-key="'.$cart_item_key.'" data-qty="'.$qty.'">+</a>';
-            $html .= '<a href="'.$remove.'" class="remove fmc-btn-remove" data-cart_item_key="'.$cart_item_key.'">&times;</a>';
+            $html .= '<a href="#" class="fmc-btn-action" data-action="plus" data-key="'.$cart_item_key.'" data-qty="'.$qty.'">&plus;</a>';
             $html .= '</div>';
+            
+            $html .= '<a href="#" class="fmc-btn-remove" data-key="'.$cart_item_key.'" title="Remove">&times;</a>';
             $html .= '<div class="fmc-price">' . $price . '</div>';
             $html .= '</li>';
         }
     }
     $html .= '</ul>';
 
-    // Footer with Prominent Total
     $html .= '<div class="fmc-footer">';
     $html .= '<div class="fmc-subtotal-row">';
-    $html .= '<span class="fmc-subtotal-label">Subtotal:</span>';
+    $html .= '<span class="fmc-subtotal-label">Subtotal</span>';
     $html .= '<span class="fmc-subtotal-amount">'. WC()->cart->get_cart_subtotal() .'</span>';
     $html .= '</div>';
-    $html .= '<a href="'. wc_get_checkout_url() .'" class="fmc-checkout-btn">Complete Order</a>';
+    $html .= '<a href="'. wc_get_checkout_url() .'" class="fmc-checkout-btn">Checkout</a>';
+    $html .= '</div>'; 
     $html .= '</div>'; 
 
     return $html;
 }
 
-// 3. Register Fragments
 add_filter( 'woocommerce_add_to_cart_fragments', 'refresh_interactive_cart_fragments' );
 function refresh_interactive_cart_fragments( $fragments ) {
     $fragments['.floating-mini-cart-container'] = '<div class="floating-mini-cart-container">' . get_interactive_mini_cart_html() . '</div>';
@@ -467,38 +455,25 @@ function refresh_interactive_cart_fragments( $fragments ) {
     return $fragments;
 }
 
-// 4. Qty Handler
 add_action( 'wp_ajax_fmc_update_qty', 'fmc_ajax_update_qty' );
 add_action( 'wp_ajax_nopriv_fmc_update_qty', 'fmc_ajax_update_qty' );
 
 function fmc_ajax_update_qty() {
-    // FIX: Ensure Cart object is available
-    if ( ! function_exists( 'WC' ) || ! WC()->cart ) {
-        wp_send_json_error( array( 'message' => 'Cart not loaded' ) );
-    }
-
-    if ( ! isset( $_POST['cart_item_key'], $_POST['quantity'] ) ) wp_send_json_error();
+    if ( ! function_exists( 'WC' ) || ! WC()->cart ) wp_send_json_error( 'Cart Error' );
+    if ( ! isset( $_POST['cart_item_key'], $_POST['quantity'] ) ) wp_send_json_error( 'Missing Data' );
     
     $key = sanitize_text_field( $_POST['cart_item_key'] );
     $qty = intval( $_POST['quantity'] );
     
-    // Check if item exists in cart to prevent errors
-    $cart_item = WC()->cart->get_cart_item( $key );
-    if( ! $cart_item ) {
-        wp_send_json_error( array( 'message' => 'Item not found' ) );
-    }
-
     if ( $qty > 0 ) {
         WC()->cart->set_quantity( $key, $qty ); 
+    } else {
+        WC()->cart->remove_cart_item( $key );
     }
     
     WC()->cart->calculate_totals();
     WC()->cart->maybe_set_cart_cookies();
     
     $fragments = apply_filters( 'woocommerce_add_to_cart_fragments', array() );
-    
-    wp_send_json_success( array( 
-        'fragments' => $fragments, 
-        'cart_hash' => WC()->cart->get_cart_hash() 
-    ) );
+    wp_send_json_success( array( 'fragments' => $fragments, 'cart_hash' => WC()->cart->get_cart_hash() ) );
 }
