@@ -1,5 +1,5 @@
 /**
- * WooCommerce Custom Cart Actions (All-in-One: V3)
+ * WooCommerce Custom Cart Actions (All-in-One: V3.1)
  * 
  * 1. Single Product: [single_product_bundle] 
  *    - Logic: Custom Form + Nice Qty + JS Redirect for Buy Now
@@ -152,7 +152,13 @@ function wpcode_global_assets() {
     ?>
     <style>
         /* --- SINGLE PRODUCT STYLES --- */
-        .wpcode-sp-row { display: flex; gap: 10px; margin-bottom: 10px; }
+        
+        /* 1. Gap Reduction */
+        .wpcode-sp-row { 
+            display: flex; 
+            gap: 10px; 
+            margin-bottom: 10px;
+        }
         
         /* Nice Qty Box */
         .wpcode-nice-qty {
@@ -212,8 +218,29 @@ function wpcode_global_assets() {
             padding: 0 10px !important; 
             height: 42px !important;
             line-height: 42px !important; 
+            position: relative; 
+            transition: all 0.3s;
+            font-weight: 400!important;
+            font-size: 16px!important;
         }
         .wpcode-sp-outline-atc:hover { background: #000 !important; color: #fff !important; }
+
+        /* 2. Fix Animation Wheel Position */
+        .wpcode-sp-outline-atc.loading {
+            opacity: 0.7;
+        }
+        .wpcode-sp-outline-atc.loading::after {
+            font-family: WooCommerce;
+            content: "\e01c";
+            vertical-align: top;
+            font-weight: 400;
+            position: absolute;
+            top: 50%;
+/*             right: 10px; */
+            animation: spin 3s linear infinite;
+            line-height: 1;            
+            font-size: 15px!important;
+        }
 
         /* Buy Now */
         .wpcode-sp-buy-now-trigger {
@@ -222,9 +249,10 @@ function wpcode_global_assets() {
             color: #fff !important;
             border: 1px solid #000 !important; 
             border-radius: 5px !important;
-            padding: 12px 0 !important; 
+            padding: 10px 0 !important; 
             cursor: pointer; 
-            font-weight: 500;
+            font-weight: 400!important;
+            font-size: 16px!important;
             display: block;
         }
         .wpcode-sp-buy-now-trigger:hover { opacity: 0.9; }
@@ -234,17 +262,22 @@ function wpcode_global_assets() {
             display: block; width: 100%; text-align: center;
             background: transparent!important; color: #000!important;
             border: 1px solid #000!important; border-radius: 5px!important;
-            padding: 10px 0!important; transition: 0.3s; position: relative;
+            padding: 10px 0!important; transition: 0.3s; position: relative;            
+            font-weight: 400!important;
+            font-size: 15px!important;
         }
         .wpcode-loop-outline-btn:hover { background: #000!important; color: #fff!important; }
-        .wpcode-loop-outline-btn.loading { opacity: 0.8; }
-        .wpcode-loop-outline-btn.added::after { content: "\e017"; font-family: WooCommerce; position: absolute; right: 10px; }
+        .wpcode-loop-outline-btn.loading { opacity: 0.8; 
+            padding-right: 15px!important; }
+        .wpcode-loop-outline-btn.added::after { content: "\e017"; font-family: WooCommerce; right: 10px!important;}
 
         .wpcode-loop-buynow-btn {
             display: block; width: 100%; text-align: center; margin-top: 10px;
             background: #000!important; color: #fff!important;
             border: 1px solid #000!important; border-radius: 5px!important;
             padding: 10px 0!important; transition: 0.3s; text-decoration: none!important;
+            font-weight: 400!important;
+            font-size: 15px!important;
         }
         .wpcode-loop-buynow-btn:hover { opacity: 0.9; color: #fff!important; }
         
