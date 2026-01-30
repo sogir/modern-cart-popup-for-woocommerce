@@ -1,5 +1,5 @@
 /*
- * 1. AJAXIFY SINGLE ADD TO CART (With Data Guarantee) - UNCHANGED
+ * 1. AJAXIFY SINGLE ADD TO CART (With Data Guarantee)
  */
 add_action( 'wp_footer', 'ajaxify_single_add_to_cart_script', 99 );
 
@@ -26,9 +26,14 @@ function ajaxify_single_add_to_cart_script() {
             var formData = new FormData($form[0]);
             formData.append('add-to-cart', $btn.val());
 
+            // Ensure we have the URL
+            var ajaxUrl = (typeof wc_add_to_cart_params !== 'undefined') 
+                ? wc_add_to_cart_params.wc_ajax_url.toString().replace( '%%endpoint%%', 'add_to_cart' ) 
+                : '/?wc-ajax=add_to_cart';
+
             // 1. Send Add to Cart Request
             $.ajax({
-                url: wc_add_to_cart_params.wc_ajax_url.toString().replace( '%%endpoint%%', 'add_to_cart' ),
+                url: ajaxUrl,
                 type: 'POST',
                 data: formData,
                 processData: false,
@@ -48,13 +53,15 @@ function ajaxify_single_add_to_cart_script() {
 
                     // 2. CHECK: Did we get the custom pill data?
                     if ( response.fragments && ( response.fragments['#fmc-pill-data'] || response.fragments['.pill-data'] ) ) {
-                        // Yes! Update immediately
                         triggerCartUpdate( response.fragments, response.cart_hash );
                     } else {
-                        // No (The Issue). 
-                        // FIX: Manually fetch fresh fragments immediately
+                        // FIX: Manually fetch fresh fragments
+                        var refreshUrl = (typeof wc_add_to_cart_params !== 'undefined') 
+                            ? wc_add_to_cart_params.wc_ajax_url.toString().replace( '%%endpoint%%', 'get_refreshed_fragments' ) 
+                            : '/?wc-ajax=get_refreshed_fragments';
+
                         $.ajax({
-                            url: wc_add_to_cart_params.wc_ajax_url.toString().replace( '%%endpoint%%', 'get_refreshed_fragments' ),
+                            url: refreshUrl,
                             type: 'POST',
                             success: function( fragResponse ) {
                                 if( fragResponse && fragResponse.fragments ) {
@@ -152,11 +159,14 @@ function render_interactive_floating_cart() {
         .pill-data { font-weight: 700; font-size: 14px; white-space: nowrap; color: #fff; min-width: 80px; }
         .pill-arrow-desktop { margin-left: 8px; color: #fff; font-size: 16px; }
 
+        /* Mobile Toggle Icon */
         .mobile-expand-btn {
             display: none; align-items: center; justify-content: center; cursor: pointer;
             padding: 0 15px; height: 48px; border-left: 1px solid rgba(255,255,255,0.2);
             background: rgba(255,255,255,0.05);
         }
+        /* FIX: White color !important */
+        .mobile-expand-btn svg { stroke: #fff !important; }
 
         /* MINI CART CONTAINER */
         .floating-mini-cart-container {
@@ -211,6 +221,11 @@ function render_interactive_floating_cart() {
         .fmc-btn-action:hover { background: #000; color: #fff !important; }
         .fmc-btn-remove { color: #ff4444; font-size: 16px; margin-left: 5px; text-decoration: none; }
         
+        .fmc-price { text-align: right; }
+        /* Price styling to handle del/ins */
+        .fmc-price del { opacity: 0.5; font-size: 0.9em; margin-right: 4px; }
+        .fmc-price ins { text-decoration: none; font-weight: bold; }
+
         /* FOOTER & TOTALS */
         .fmc-footer {
             padding: 15px;
@@ -240,7 +255,8 @@ function render_interactive_floating_cart() {
                 width: 90vw; 
                 max-width: 360px; 
                 right: 0; 
-                bottom: calc(100% + 10px); /* Sits right above the pill with small gap */
+                /* FIX: Gap removed */
+                bottom: 60px; 
                 margin-bottom: 0;
                 transform: none; 
                 visibility: visible; 
@@ -262,20 +278,17 @@ function render_interactive_floating_cart() {
         
         var autoCloseTimer;
 
-        // 1. LISTEN FOR EVENTS (Added + Refreshed)
-        // 'wc_fragments_refreshed' ensures we update even if 'added_to_cart' missed the data
+        // 1. LISTEN FOR EVENTS
         $(document.body).on('added_to_cart removed_from_cart updated_cart_totals wc_fragments_refreshed', function(e, fragments, cart_hash, $button){
             
             var $wrapper = $('#floating-cart-wrapper');
             var $miniCart = $wrapper.find('.floating-mini-cart-container');
             
             if( fragments ) {
-                // A. UPDATE THE LIST
                 if( fragments['.floating-mini-cart-container'] ) {
                     $miniCart.replaceWith( fragments['.floating-mini-cart-container'] );
-                    $miniCart = $wrapper.find('.floating-mini-cart-container'); // Re-select
+                    $miniCart = $wrapper.find('.floating-mini-cart-container'); 
                 }
-                // B. UPDATE THE PILL TEXT
                 if( fragments['#fmc-pill-data'] ) {
                     $('#fmc-pill-data').replaceWith( fragments['#fmc-pill-data'] );
                 } else if ( fragments['.pill-data'] ) {
@@ -283,12 +296,10 @@ function render_interactive_floating_cart() {
                 }
             }
 
-            // C. VISUALS (Shake & Show)
             $wrapper.fadeIn();
             $wrapper.addClass('do-shake');
             setTimeout(function(){ $wrapper.removeClass('do-shake'); }, 500);
 
-            // D. AUTO OPEN LOGIC (Only on Add/Update, not just generic refresh if invisible)
             if ( e.type === 'added_to_cart' ) {
                 clearTimeout(autoCloseTimer);
                 $miniCart.addClass('force-open');
@@ -302,19 +313,17 @@ function render_interactive_floating_cart() {
                 }, 4000);
             }
             
-            // Check emptiness
             if( $('.fmc-item').length === 0 && !fragments ) {
                  $wrapper.fadeOut();
             }
         });
 
-        // 2. CANCEL AUTO-CLOSE ON HOVER
+        // 2. AUTO CLOSE LOGIC
         $(document).on('mouseenter', '#floating-cart-wrapper', function() {
             clearTimeout(autoCloseTimer);
             $(this).find('.floating-mini-cart-container').addClass('force-open');
         });
 
-        // 3. RESTART TIMER ON LEAVE
         $(document).on('mouseleave', '#floating-cart-wrapper', function() {
             var $wrapper = $(this);
             autoCloseTimer = setTimeout(function(){
@@ -322,13 +331,12 @@ function render_interactive_floating_cart() {
             }, 1000);
         });
 
-        // 4. Mobile Toggle
+        // 3. Mobile Interactions
         $(document).on('click', '.mobile-expand-btn', function(e){
             e.preventDefault(); e.stopPropagation(); 
             $('#floating-cart-wrapper').toggleClass('mobile-open');
         });
 
-        // 5. Close on Click Outside or Close Icon
         $(document).on('click', function(e) {
             if (!$(e.target).closest('#floating-cart-wrapper').length) {
                 $('#floating-cart-wrapper').removeClass('mobile-open');
@@ -336,21 +344,26 @@ function render_interactive_floating_cart() {
             }
         });
 
-        // NEW: Close Icon Click
         $(document).on('click', '.fmc-close-icon', function(e){
             e.preventDefault();
             $('#floating-cart-wrapper').removeClass('mobile-open');
             $('.floating-mini-cart-container').removeClass('force-open');
         });
 
-        // 6. Qty Buttons Logic
+        // 4. Qty Buttons Logic (FIXED)
         $(document).on('click', '.fmc-btn-action', function(e) {
             e.preventDefault();
+            e.stopImmediatePropagation(); // Prevent double firing
+            
             var $btn = $(this);
             var key = $btn.data('key');
             var qty = parseInt($btn.data('qty'));
+            
+            if( !key || isNaN(qty) ) return;
+
             var new_qty = ($btn.data('action') === 'plus') ? qty + 1 : qty - 1;
 
+            // Trigger Remove if 0
             if( new_qty < 1 ) {
                  $('.fmc-btn-remove[data-cart_item_key="' + key + '"]').trigger('click');
                  return;
@@ -359,13 +372,21 @@ function render_interactive_floating_cart() {
             // Visual feedback
             $btn.closest('.fmc-item').css('opacity', '0.5');
 
+            // Fallback for Ajax URL if params are missing
+            var ajaxUrl = (typeof wc_add_to_cart_params !== 'undefined') ? wc_add_to_cart_params.ajax_url : '/wp-admin/admin-ajax.php';
+
             $.ajax({
-                type: 'POST', url: wc_add_to_cart_params.ajax_url,
+                type: 'POST', 
+                url: ajaxUrl,
                 data: { action: 'fmc_update_qty', cart_item_key: key, quantity: new_qty },
                 success: function(res) {
                     if ( res.success ) {
                         $( document.body ).trigger( 'added_to_cart', [ res.data.fragments, res.data.cart_hash ] );
                     }
+                },
+                error: function() {
+                    // Fallback reload if ajax fails
+                    window.location.reload();
                 },
                 complete: function() { 
                     $btn.closest('.fmc-item').css('opacity', '1'); 
@@ -388,7 +409,7 @@ function get_custom_pill_text() {
     return "{$count} Items - {$total}";
 }
 
-// 2. Mini Cart HTML (RESTRUCTURED)
+// 2. Mini Cart HTML
 function get_interactive_mini_cart_html() {
     if ( ! WC()->cart || WC()->cart->is_empty() ) return '<div style="padding:15px;text-align:center;">Cart is empty</div>';
 
@@ -405,7 +426,10 @@ function get_interactive_mini_cart_html() {
         $_product = apply_filters( 'woocommerce_cart_item_product', $cart_item['data'], $cart_item, $cart_item_key );
         if ( $_product && $_product->exists() && $cart_item['quantity'] > 0 ) {
             $product_name = $_product->get_name();
-            $price = WC()->cart->get_product_price( $_product );
+            
+            // FIX: Use get_price_html() to ensure strike-through prices (Sale + Regular) show up
+            $price = $_product->get_price_html(); 
+            
             $qty = $cart_item['quantity'];
             $remove = wc_get_cart_remove_url( $cart_item_key );
 
@@ -430,7 +454,7 @@ function get_interactive_mini_cart_html() {
     $html .= '<span class="fmc-subtotal-amount">'. WC()->cart->get_cart_subtotal() .'</span>';
     $html .= '</div>';
     $html .= '<a href="'. wc_get_checkout_url() .'" class="fmc-checkout-btn">Complete Order</a>';
-    $html .= '</div>'; // End footer
+    $html .= '</div>'; 
 
     return $html;
 }
@@ -443,16 +467,27 @@ function refresh_interactive_cart_fragments( $fragments ) {
     return $fragments;
 }
 
-// 4. Qty Handler (FIXED)
+// 4. Qty Handler
 add_action( 'wp_ajax_fmc_update_qty', 'fmc_ajax_update_qty' );
 add_action( 'wp_ajax_nopriv_fmc_update_qty', 'fmc_ajax_update_qty' );
 
 function fmc_ajax_update_qty() {
+    // FIX: Ensure Cart object is available
+    if ( ! function_exists( 'WC' ) || ! WC()->cart ) {
+        wp_send_json_error( array( 'message' => 'Cart not loaded' ) );
+    }
+
     if ( ! isset( $_POST['cart_item_key'], $_POST['quantity'] ) ) wp_send_json_error();
     
     $key = sanitize_text_field( $_POST['cart_item_key'] );
     $qty = intval( $_POST['quantity'] );
     
+    // Check if item exists in cart to prevent errors
+    $cart_item = WC()->cart->get_cart_item( $key );
+    if( ! $cart_item ) {
+        wp_send_json_error( array( 'message' => 'Item not found' ) );
+    }
+
     if ( $qty > 0 ) {
         WC()->cart->set_quantity( $key, $qty ); 
     }
@@ -460,8 +495,6 @@ function fmc_ajax_update_qty() {
     WC()->cart->calculate_totals();
     WC()->cart->maybe_set_cart_cookies();
     
-    // FIX: Do not call woocommerce_cart_fragments() directly as it prints output.
-    // Instead, get the fragments via filter.
     $fragments = apply_filters( 'woocommerce_add_to_cart_fragments', array() );
     
     wp_send_json_success( array( 
